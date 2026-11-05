@@ -1,8 +1,9 @@
 import allure
 import pytest
 
-import helpers.courier as courier_helper
-from data import COURIER_BODY, CREATE_COURIER_MISSING_FIELD_CASES
+from data import CREATE_COURIER_MISSING_FIELD_CASES
+from helpers.generators import generate_courier_data
+from helpers.courier_methods import create_courier, login_courier, delete_courier
 
 COURIER_CREATED_CODE = 201
 CONFLICT_CODE = 409
@@ -12,39 +13,38 @@ MISSING_DATA_CODE = 400
 @allure.feature("Создание курьера")
 class TestCreateCourier:
 
-    @allure.story("Курьера можно создать")
+    @allure.title("Курьера можно создать")
     def test_create_courier_success(self):
-        payload = {
-            "login": courier_helper.generate_random_string(10),
-            "password": courier_helper.generate_random_string(10),
-            "firstName": "Иван",
-        }
+        payload = generate_courier_data()
 
-        response = courier_helper.create_courier(payload)
+        response = create_courier(payload)
         assert response.status_code == COURIER_CREATED_CODE
         assert response.json() == {"ok": True}
 
-        login_response = courier_helper.login_courier(
+        login_response = login_courier(
             {"login": payload["login"], "password": payload["password"]}
         )
-        courier_helper.delete_courier(login_response.json()["id"])
+        assert login_response.status_code == 200
+        delete_courier(login_response.json()["id"])
 
-    @allure.story("Нельзя создать двух одинаковых курьеров")
+    @allure.title("Нельзя создать двух одинаковых курьеров")
     def test_create_duplicate_courier(self, new_courier):
-        payload = {**COURIER_BODY, **new_courier, "firstName": "Иван"}
-        courier_helper.create_courier(payload)
+        payload = {
+            "login": new_courier["login"],
+            "password": new_courier["password"],
+            "firstName": new_courier.get("first_name", "Иван"),
+        }
 
-        response = courier_helper.create_courier(payload)
+        response = create_courier(payload)
         assert response.status_code == CONFLICT_CODE
-        assert "message" in response.json()
+        assert response.json()["message"] == "Этот логин уже используется. Попробуйте другой."
 
-    @allure.story("Без одного из обязательных полей курьер не создаётся")
-    @allure.title("Создание курьера: {case_name}")
+    @allure.title("Создание курьера без обязательного поля: {case_name}")
     @pytest.mark.parametrize("case_name, missing_field", CREATE_COURIER_MISSING_FIELD_CASES)
-    def test_create_courier_missing_field(self, new_courier, case_name, missing_field):
-        payload = {**COURIER_BODY, **new_courier, "firstName": "Иван"}
+    def test_create_courier_missing_field(self, case_name, missing_field):
+        payload = generate_courier_data()
         payload.pop(missing_field)
 
-        response = courier_helper.create_courier(payload)
+        response = create_courier(payload)
         assert response.status_code == MISSING_DATA_CODE
-        assert "message" in response.json()
+        assert response.json()["message"] == "Недостаточно данных для создания учетной записи"

@@ -1,17 +1,32 @@
 import pytest
 
-import helpers.courier as courier_helper
+from helpers.courier_methods import create_courier, login_courier, delete_courier
+from helpers.generators import generate_courier_data
+
+CREATED_CODE = 201
+OK_CODE = 200
 
 
 @pytest.fixture()
 def new_courier():
-    login, password, first_name = (
-        courier_helper.register_new_courier_and_return_login_password()
+    payload = generate_courier_data()
+    create_response = create_courier(payload)
+    assert create_response.status_code == CREATED_CODE, (
+        f"Не удалось создать курьера в фикстуре: {create_response.status_code}"
     )
-    credentials = {"login": login, "password": password}
+
+    login_response = login_courier(
+        {"login": payload["login"], "password": payload["password"]}
+    )
+    assert login_response.status_code == OK_CODE
+    courier_id = login_response.json()["id"]
+
+    credentials = {
+        "login": payload["login"],
+        "password": payload["password"],
+        "id": courier_id,
+    }
 
     yield credentials
 
-    login_response = courier_helper.login_courier(credentials)
-    if login_response.status_code == 200:
-        courier_helper.delete_courier(login_response.json()["id"])
+    delete_courier(courier_id)
